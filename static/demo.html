@@ -1,0 +1,282 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>YOLO Segmentation</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+  <style>
+    :root {
+      --bg: #f3f5f7;
+      --card: #ffffff;
+      --ink: #1f2933;
+      --muted: #5f6c7a;
+      --line: #d7dde4;
+      --accent: #0b6bcb;
+      --accent-soft: #e8f2fe;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      font-family: "Poppins", "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+      background: linear-gradient(180deg, #f8fafc, var(--bg));
+      color: var(--ink);
+    }
+
+    .wrap {
+      max-width: 960px;
+      margin: 32px auto;
+      padding: 0 16px;
+    }
+
+    .card {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      box-shadow: 0 8px 24px rgba(15, 23, 42, 0.08);
+      overflow: hidden;
+    }
+
+    .head {
+      padding: 20px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .head h1 {
+      margin: 0 0 6px;
+      font-size: 1.35rem;
+    }
+
+    .head p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 0.95rem;
+    }
+
+    .body {
+      padding: 20px;
+      display: grid;
+      gap: 16px;
+    }
+
+    form {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      align-items: center;
+    }
+
+    .file-label {
+      font-weight: 600;
+      margin-right: 4px;
+    }
+
+    input[type="file"] {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 8px;
+      background: #fff;
+      max-width: 100%;
+    }
+
+    button {
+      border: none;
+      border-radius: 8px;
+      padding: 10px 14px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+
+    .run-btn {
+      background: var(--accent);
+      color: #fff;
+    }
+
+    .tabs {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .tab-btn {
+      background: #f2f4f7;
+      color: var(--ink);
+    }
+
+    .tab-btn.active {
+      background: var(--accent-soft);
+      color: var(--accent);
+      outline: 1px solid #bad7fb;
+    }
+
+    .status {
+      font-size: 0.93rem;
+      color: var(--muted);
+      min-height: 20px;
+    }
+
+    .panel {
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 12px;
+      background: #fcfdff;
+    }
+
+    .panel.hidden {
+      display: none;
+    }
+
+    pre {
+      margin: 0;
+      white-space: pre-wrap;
+      word-break: break-word;
+      font-size: 0.9rem;
+    }
+
+    .preview {
+      width: 100%;
+      max-height: 520px;
+      object-fit: contain;
+      background: #f8fafc;
+      border: 1px dashed #c5ced8;
+      border-radius: 8px;
+    }
+
+    @media (max-width: 640px) {
+      .wrap { margin-top: 14px; }
+      .head, .body { padding: 14px; }
+      .run-btn { width: 100%; }
+    }
+  </style>
+</head>
+<body>
+  <main class="wrap">
+    <section class="card">
+      <header class="head">
+        <h1>YOLO Segmentation Demo</h1>
+        <p>Upload image, run both endpoints, and switch output mode.</p>
+      </header>
+
+      <div class="body">
+        <form id="predict-form">
+          <label for="imageFile" class="file-label">Upload Image:</label>
+          <input id="imageFile" name="file" type="file" accept="image/*" required />
+          <button class="run-btn" type="submit">Run Prediction</button>
+        </form>
+
+        <div class="status" id="status">Choose an image to begin.</div>
+
+        <div class="tabs">
+          <button type="button" class="tab-btn active" data-target="json-panel">Predict JSON</button>
+          <button type="button" class="tab-btn" data-target="viz-panel">Visualized Output</button>
+        </div>
+
+        <section id="json-panel" class="panel">
+          <pre id="json-output">No prediction yet.</pre>
+        </section>
+
+        <section id="viz-panel" class="panel hidden">
+          <img id="viz-output" class="preview" alt="Visualization output" />
+        </section>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    const form = document.getElementById("predict-form");
+    const fileInput = document.getElementById("imageFile");
+    const statusEl = document.getElementById("status");
+    const jsonOutput = document.getElementById("json-output");
+    const vizOutput = document.getElementById("viz-output");
+    const tabButtons = Array.from(document.querySelectorAll(".tab-btn"));
+    const panels = {
+      "json-panel": document.getElementById("json-panel"),
+      "viz-panel": document.getElementById("viz-panel")
+    };
+
+    let currentVizUrl = "";
+
+    function setStatus(text, isError = false) {
+      statusEl.textContent = text;
+      statusEl.style.color = isError ? "#b42318" : "var(--muted)";
+    }
+
+    function activateTab(targetId) {
+      tabButtons.forEach((btn) => {
+        btn.classList.toggle("active", btn.dataset.target === targetId);
+      });
+      Object.entries(panels).forEach(([id, panel]) => {
+        panel.classList.toggle("hidden", id !== targetId);
+      });
+    }
+
+    async function runPrediction(file) {
+      const jsonForm = new FormData();
+      jsonForm.append("file", file);
+
+      const vizForm = new FormData();
+      vizForm.append("file", file);
+
+      const [jsonResp, vizResp] = await Promise.all([
+        fetch("/predict", { method: "POST", body: jsonForm }),
+        fetch("/predict/visualize", { method: "POST", body: vizForm })
+      ]);
+
+      if (!jsonResp.ok) {
+        const err = await jsonResp.text();
+        throw new Error(`Predict failed: ${err}`);
+      }
+      if (!vizResp.ok) {
+        const err = await vizResp.text();
+        throw new Error(`Visualize failed: ${err}`);
+      }
+
+      const jsonData = await jsonResp.json();
+      const vizBlob = await vizResp.blob();
+      return { jsonData, vizBlob };
+    }
+
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault();
+
+      const file = fileInput.files && fileInput.files[0];
+      if (!file) {
+        setStatus("Please select an image first.", true);
+        return;
+      }
+
+      setStatus("Running /predict and /predict/visualize...");
+      jsonOutput.textContent = "Loading...";
+
+      try {
+        const { jsonData, vizBlob } = await runPrediction(file);
+        jsonOutput.textContent = JSON.stringify(jsonData, null, 2);
+
+        if (currentVizUrl) URL.revokeObjectURL(currentVizUrl);
+        currentVizUrl = URL.createObjectURL(vizBlob);
+        vizOutput.src = currentVizUrl;
+
+        setStatus(`Done. Found ${jsonData.detections?.length || 0} detection(s).`);
+      } catch (error) {
+        jsonOutput.textContent = "Request failed.";
+        setStatus(error instanceof Error ? error.message : "Request failed.", true);
+      }
+    });
+
+    fileInput.addEventListener("change", () => {
+      if (fileInput.files && fileInput.files[0]) {
+        form.requestSubmit();
+      }
+    });
+
+    tabButtons.forEach((btn) => {
+      btn.addEventListener("click", () => activateTab(btn.dataset.target));
+    });
+  </script>
+</body>
+</html>
