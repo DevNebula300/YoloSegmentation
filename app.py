@@ -8,7 +8,6 @@ from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.responses import HTMLResponse, StreamingResponse
 from PIL import Image, ImageDraw, UnidentifiedImageError
 
-# Keep Ultralytics runtime files inside the project to avoid AppData permission issues.
 os.environ.setdefault("YOLO_CONFIG_DIR", os.path.join(os.getcwd(), ".ultralytics"))
 
 from ultralytics import YOLO
